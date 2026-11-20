@@ -1,0 +1,37 @@
+name: Windows build and tests
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Stockfish
+        shell: pwsh
+        run: ./build/setup-engine.ps1
+      - name: Run tests
+        run: cargo test --locked -- --test-threads=2
+      - name: Test browser board and arrows
+        run: node tests/browser.cjs
+      - name: Build release
+        run: cargo build --release --locked
+      - name: Package desktop application
+        shell: pwsh
+        run: ./build/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RbChessAssist-Windows
+          path: release/RbChessAssist-Windows.zip
+      - name: Publish versioned release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME release/RbChessAssist-Windows.zip --title "RbChessAssist $env:GITHUB_REF_NAME" --generate-notes

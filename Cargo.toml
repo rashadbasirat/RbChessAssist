@@ -1,0 +1,35 @@
+[package]
+name = "chess-assistant-pro"
+version = "1.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Offline chess studio with Stockfish analysis, game review, and training"
+
+[dependencies]
+eframe = { version = "0.31.1", default-features = false, features = ["default_fonts", "glow"] }
+egui_extras = { version = "0.31.1", features = ["svg", "image"] }
+shakmaty = "0.30.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rfd = "0.15"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+arboard = "3"
+directories = "6"
+xcap = { version = "0.9.8", features = ["wgc"] }
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+getrandom = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
+
+
+[profile.dev.package.image]
+opt-level = 2
+
+[profile.dev.package.moxcms]
+opt-level = 2
