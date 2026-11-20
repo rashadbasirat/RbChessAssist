@@ -116,11 +116,7 @@ fn run(
     status("Ready. Click your Connect RbChessAssist bookmark on Chess.com. First time? Open bookmark setup below.".into(),&mut last_status);
     while !stop.load(Ordering::Relaxed) {
         if let Ok((stream, _)) = listener.accept() {
-            if let Ok(Some(mut new)) = accept_connection(stream, &token) {
-                if let Some(old) = socket.as_mut() {
-                    let _ = send(old, json!({"type":"dispose"}));
-                    let _ = old.close(None);
-                }
+            if let Ok(Some(mut new)) = accept_connection(stream, &token, socket.is_some()) {
                 send(
                     &mut new,
                     json!({"type":"connected","enabled":enabled,"arrows":arrows}),
@@ -221,7 +217,12 @@ fn run(
                                                 options.seconds = 15.0;
                                                 options.depth = 40;
                                             }
-                                            job = worker.start_live(current.clone(), options);
+                                            job = worker.start(
+                                                current.clone(),
+                                                options,
+                                                false,
+                                                false,
+                                            );
                                             let _ = send(
                                                 s,
                                                 json!({"type":"status","message":if is_deep{"Analyzing deeper (up to 15 seconds)..."}else{"Finding a move..."}}),
@@ -307,9 +308,11 @@ pub fn authorized_request(origin: &str, path: &str, host: &str, token: &str) -> 
 fn accept_connection(
     mut stream: TcpStream,
     token: &str,
+    busy: bool,
 ) -> Result<Option<WebSocket<TcpStream>>, String> {
+    stream.set_nonblocking(false).map_err(|e| e.to_string())?;
     stream
-        .set_read_timeout(Some(Duration::from_millis(250)))
+        .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|e| e.to_string())?;
     stream
         .set_write_timeout(Some(Duration::from_secs(2)))
@@ -340,6 +343,12 @@ fn accept_connection(
             .and_then(|s| s.to_str().ok())
             .unwrap_or("");
         if authorized_request(origin, request.uri().path(), host, token) {
+            if busy {
+                return Err(tungstenite::http::Response::builder()
+                    .status(409)
+                    .body(Some("Another board is already connected".into()))
+                    .unwrap());
+            }
             Ok(response)
         } else {
             Err(tungstenite::http::Response::builder()
@@ -351,9 +360,13 @@ fn accept_connection(
     let config = WebSocketConfig::default()
         .max_message_size(Some(16_384))
         .max_frame_size(Some(16_384));
-    tungstenite::accept_hdr_with_config(stream, callback, Some(config))
-        .map(Some)
-        .map_err(|e| e.to_string())
+    let socket = tungstenite::accept_hdr_with_config(stream, callback, Some(config))
+        .map_err(|e| e.to_string())?;
+    socket
+        .get_ref()
+        .set_read_timeout(Some(Duration::from_millis(250)))
+        .map_err(|e| e.to_string())?;
+    Ok(Some(socket))
 }
 pub fn connection_token() -> Result<String, String> {
     static TOKEN_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

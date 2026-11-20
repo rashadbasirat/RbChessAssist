@@ -215,7 +215,7 @@ impl Studio {
         self.home = false;
         self.settings.arrows = true;
         self.browser_paused = false;
-        self.minimize_after_connect = true;
+        self.minimize_after_connect = false;
         if self
             .screen_reader
             .as_ref()
@@ -281,7 +281,16 @@ impl Studio {
         self.variation_step = 0;
         self.selected = None;
     }
+    fn disconnect_browser_for_local_game(&mut self) {
+        // Local play/import/analysis owns this board until Start helping is used again.
+        // Dropping the receiver also discards already queued website positions.
+        self.screen_reader = None;
+        self.browser_paused = true;
+        self.last_board = None;
+        self.minimize_after_connect = false;
+    }
     fn load(&mut self, g: Game) {
+        self.disconnect_browser_for_local_game();
         self.reset_analysis();
         self.game = g;
         self.history.clear();
@@ -315,6 +324,7 @@ impl Studio {
         }
     }
     fn search(&mut self, play: bool, review: bool) {
+        self.disconnect_browser_for_local_game();
         self.home = false;
         self.variation.clear();
         self.variation_step = 0;
@@ -345,6 +355,7 @@ impl Studio {
         .into();
     }
     fn push(&mut self, m: Move) {
+        self.disconnect_browser_for_local_game();
         let from = m.from();
         let symbol = from
             .and_then(|sq| self.game.pos().board().piece_at(sq))
@@ -1621,7 +1632,7 @@ impl Studio {
             }
             if ui.checkbox(&mut self.compact,"Compact app window").changed() { self.resize_coach(ctx); }
             if ui.button("Load current FEN (fallback)").clicked() { self.open_import(false); }
-            ui.label(RichText::new("Move arrows appear while Stockfish searches and update as it thinks. Details adds numbered turquoise, red and blue arrows. Stop removes them immediately. The app minimizes after connecting and keeps helping in the background.").size(12.).color(MUTED));
+            ui.label(RichText::new("A settled move appears after the short engine search and stays until the position changes. Details adds numbered turquoise, red and blue arrows. Stop removes them immediately. The app stays visible while helping. You can minimize it yourself.").size(12.).color(MUTED));
         });
         self.coach_open = open;
     }

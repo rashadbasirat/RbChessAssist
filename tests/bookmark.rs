@@ -113,6 +113,23 @@ fn local_bookmark_connection_analyzes_and_pauses() {
         .insert("Origin", "https://www.chess.com".parse().unwrap());
     let (mut ws, _) = tungstenite::client(request, stream).unwrap();
     assert!(matches!(ws.read().unwrap(), Message::Text(_)));
+    // A second tab must not dispose the active coach.
+    let second_stream = TcpStream::connect("127.0.0.1:38272").unwrap();
+    second_stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut second_request = format!("ws://{address}/coach/{token}")
+        .into_client_request()
+        .unwrap();
+    second_request
+        .headers_mut()
+        .insert("Origin", "https://www.chess.com".parse().unwrap());
+    match tungstenite::client(second_request, second_stream) {
+        Err(tungstenite::HandshakeError::Failure(tungstenite::Error::Http(response))) => {
+            assert_eq!(response.status(), 409)
+        }
+        other => panic!("Second board should receive a busy response: {other:?}"),
+    }
     let fen = game::fen(Game::default().pos());
     let payload = serde_json::json!({"placement":fen.split_whitespace().next().unwrap(),"fen":fen,"flipped":false,"deep":0});
     for _ in 0..3 {
@@ -125,6 +142,10 @@ fn local_bookmark_connection_analyzes_and_pauses() {
             let value: serde_json::Value = serde_json::from_str(&text).unwrap();
             if value["type"] == "hint" && !value["value"].is_null() {
                 let hint = &value["value"];
+                assert_eq!(
+                    hint["searching"], false,
+                    "Only settled suggestions should reach the board"
+                );
                 assert!(
                     game::uci_move(Game::default().pos(), hint["uci"].as_str().unwrap()).is_ok()
                 );

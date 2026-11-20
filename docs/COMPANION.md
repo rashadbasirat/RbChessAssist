@@ -22,13 +22,13 @@ The extension only runs on Chess.com. Its generated files include your personal 
 
 ## Each session
 
-With the extension installed, open the app and click **Start helping**. The board connects automatically. With the optional bookmark method, also click **Connect RbChessAssist** on your game. An early engine result appears while the search continues. The app minimizes after its first suggestion and continues running in the background. Restore it from the taskbar to use the local library or review tools.
+With the extension installed, open the app and click **Start helping**. The board connects automatically. With the optional bookmark method, also click **Connect RbChessAssist** on your game. A settled suggestion appears after the short search. The app stays visible after connecting. You can minimize it manually and it will continue running.
 
-On Chess.com, **Details** sits immediately below **Start/Stop helping**. It expands move instructions, tactical observations, material balance, evaluation, expected reply, continuation, alternatives and attributed book passages. Details adds numbered turquoise, red and blue arrows: suggested move, expected reply, and following move. Read them sequentially; the later arrows depict a possible future position. **Analyze deeper** searches for up to 15 seconds while updating the visible suggestion. Ordinary searches use up to three seconds, eight threads and 512 MB of hash, capped by your saved settings.
+On Chess.com, **Details** sits immediately below **Start/Stop helping**. It expands move instructions, tactical observations, material balance, evaluation, expected reply, continuation, alternatives and attributed book passages. Details adds numbered turquoise, red and blue arrows: suggested move, expected reply, and following move. Read them sequentially; the later arrows depict a possible future position. **Analyze deeper** searches for up to 15 seconds before replacing the visible suggestion. Ordinary searches use up to three seconds, eight threads and 512 MB of hash, capped by your saved settings.
 
 You play the moves yourself. The coach updates when the position changes. Suggestions describe the side to move; positive evaluations favor White and negative favor Black. The expected reply is an engine prediction.
 
-**Stop helping** pauses analysis and hides arrows. **Start helping** resumes without installing the bookmark again. Closing the app ends the connection. After refreshing Chess.com, the extension reconnects automatically. Bookmark users click the bookmark again. Connecting a second game tab replaces the previous connection.
+**Stop helping** pauses analysis and hides arrows. **Start helping** resumes without installing the bookmark again. Closing the app ends the connection. After refreshing Chess.com, the extension reconnects automatically. Bookmark users click the bookmark again. An already-connected tab keeps its connection when another tab attempts to connect. Close the connected tab before switching games.
 
 ## If it does not connect
 

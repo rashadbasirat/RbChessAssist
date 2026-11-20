@@ -39,3 +39,7 @@ GitHub Actions is configured to run the Rust and browser tests and build/package
 ## Automatic connection verification, November 19, 2026
 
 Installed the scoped RbChessAssist extension in the existing signed-in Chrome profile. Reloaded Chess.com, started the native app, and verified automatic connection without a bookmark click. The engine displayed Rfe1+ on the current bot position. Details displayed numbered turquoise, red and blue continuation arrows with matching explanations. Website Stop removed all arrows, and Start resumed the suggestion. A visual check found long arrows ended too far short of their destinations; endpoint geometry was corrected, the extension reloaded, and a second live check verified the turquoise a3-d6, red c8-b7 and blue f3-f4 arrows reached their target squares.
+
+## November 20 stability fixes
+
+Local training, imports and manual analysis now detach the website coach and discard queued website events, preventing the website from replacing a local game. Normal coaching publishes only completed search results. Automatic minimizing is disabled. A second board receives HTTP 409 without disposing the first connection. Accepted sockets explicitly use blocking handshakes, then bounded read timeouts. All 35 Rust tests passed, including the two-client regression and settled-result assertion. Manual local play with Chrome open retained 1. e4 e5 2. Nf3 Nc6 and its move history.
