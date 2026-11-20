@@ -56,6 +56,16 @@ pub fn search(
     generation: &AtomicU64,
     id: u64,
 ) -> Result<Analysis, String> {
+    search_with_progress(pos, settings, play, generation, id, None)
+}
+fn search_with_progress(
+    pos: &Chess,
+    settings: &Settings,
+    play: bool,
+    generation: &AtomicU64,
+    id: u64,
+    progress: Option<&dyn Fn(Analysis)>,
+) -> Result<Analysis, String> {
     if pos.is_game_over() {
         return Ok(Analysis::default());
     }
@@ -200,6 +210,7 @@ pub fn search(
     )?;
     let clock = Instant::now();
     let mut result = Analysis::default();
+    let mut last_preview = Duration::ZERO;
     loop {
         if generation.load(Ordering::Relaxed) != id {
             let _ = send(&mut input, "stop");
@@ -220,6 +231,26 @@ pub fn search(
                             .lines
                             .resize_with(result.lines.len().max(index), Line::default);
                         result.lines[index - 1] = line;
+                        let elapsed = clock.elapsed();
+                        if index == 1
+                            && result.lines[0].depth >= 6
+                            && elapsed >= Duration::from_millis(180)
+                            && (last_preview.is_zero()
+                                || elapsed.saturating_sub(last_preview)
+                                    >= Duration::from_millis(650))
+                        {
+                            if let Some(publish) = progress {
+                                let mut preview = result.clone();
+                                preview.best =
+                                    preview.lines[0].pv.first().cloned().unwrap_or_default();
+                                if game::uci_move(pos, &preview.best).is_ok() {
+                                    preview.elapsed = elapsed.as_secs_f32();
+                                    preview.lines.retain(|line| !line.pv.is_empty());
+                                    publish(preview);
+                                    last_preview = elapsed;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -428,6 +459,7 @@ pub fn review_row(game: &game::Game, ply: usize, before: &Analysis, after: &Anal
 }
 
 pub enum Event {
+    Progress(u64, Analysis),
     Analysis(u64, Analysis, bool),
     Review(u64, ReviewRow),
     Done(u64),
@@ -455,6 +487,19 @@ impl Worker {
         self.generation.fetch_add(1, Ordering::Relaxed) + 1
     }
     pub fn start(&mut self, game: game::Game, settings: Settings, play: bool, review: bool) -> u64 {
+        self.start_task(game, settings, play, review, false)
+    }
+    pub fn start_live(&mut self, game: game::Game, settings: Settings) -> u64 {
+        self.start_task(game, settings, false, false, true)
+    }
+    fn start_task(
+        &mut self,
+        game: game::Game,
+        settings: Settings,
+        play: bool,
+        review: bool,
+        live: bool,
+    ) -> u64 {
         let id = self.cancel();
         let gen_id = self.generation.clone();
         let tx = self.sender.clone();
@@ -474,7 +519,17 @@ impl Worker {
                     }
                     let _ = tx.send(Event::Done(id));
                 } else {
-                    let a = search(game.pos(), &settings, play, &gen_id, id)?;
+                    let publish = |a| {
+                        let _ = tx.send(Event::Progress(id, a));
+                    };
+                    let a = search_with_progress(
+                        game.pos(),
+                        &settings,
+                        play,
+                        &gen_id,
+                        id,
+                        if live { Some(&publish) } else { None },
+                    )?;
                     let _ = tx.send(Event::Analysis(id, a, play));
                 }
                 Ok(())

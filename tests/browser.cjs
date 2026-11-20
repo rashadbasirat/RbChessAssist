@@ -23,15 +23,43 @@ assert.throws(()=>context.rbDecodePieces([]),/complete/);
 console.log('PASS: board decoding, duplicates, and missing kings');
 const svg=nodes.find(n=>n.id==='rbchessassist-arrow'),line=nodes.find(n=>n.tag==='line');
 const hint={placement:initial,uci:'e2e4',san:'e4',evaluation:'+0.2',details:'Move your pawn from e2 to e4.'};
-api.setHint(hint);assert.equal(svg.style.display,'block');assert.equal(svg.style.left,'200px');assert.equal(line.attrs.x1,'450');assert.equal(line.attrs.y1,'650');assert.equal(line.attrs.y2,'480');
+hint.arrows=[{uci:'e2e4'},{uci:'e7e5'},{uci:'g1f3'}];
+api.setHint(hint);assert.equal(svg.style.display,'block');assert.equal(svg.style.left,'200px');assert.equal(line.attrs.x1,'450');assert.equal(line.attrs.y1,'650');assert.equal(line.attrs.y2,'462');
 console.log('PASS: arrow attaches to the browser board coordinates');
+const extra=nodes.find(n=>n.id==='rbchessassist-detail-arrows');
+assert.equal(extra.children.length,0);detailToggle.click();
+assert.deepEqual(extra.children.filter(n=>n.tag==='line').map(n=>n.attrs.stroke),['#ff647c','#65a7ff']);
+assert.deepEqual(extra.children.filter(n=>n.tag==='text').map(n=>n.textContent),['1','2','3']);
+detailToggle.click();assert.equal(extra.children.length,0);
+deeper.disabled=false;deeper.click();const request=api.snapshot().deep;deeper.click();assert.equal(api.snapshot().deep,request);
+api.setStatus('Analyzing deeper (up to 15 seconds)...');assert.equal(svg.style.display,'block');
+console.log('PASS: colored numbered continuation, Details visibility, and repeated deep-search prevention');
 flipped=true;tick();assert.equal(api.snapshot().flipped,true);assert.equal(line.attrs.x1,'350');assert.equal(line.attrs.y1,'150');
 api.setEnabled(false);api.setHint(hint);assert.equal(svg.style.display,'none');assert.equal(api.snapshot().paused,true);
 api.setEnabled(true);api.setHint(hint);api.setArrows(false);assert.equal(svg.style.display,'none');api.setArrows(true);
 console.log('PASS: rotated board and website Start/Stop controls');
 pieces.find(p=>p.className==='piece wp square-52').className='piece wp square-54';tick();assert.equal(svg.style.display,'none');assert.equal(api.snapshot().fen,null);
 console.log('PASS: changing position clears stale arrows and rejects stale FEN');
-now=8000;tick();assert.equal(svg.style.display,'none');api.dispose();assert.equal(context.__rbChessCoach,undefined);assert.equal(svg.removed,true);
+pieces.find(p=>p.className==='piece wp square-54').className='piece wp square-52';api.setHint(hint);api.touch();now=8000;tick();assert.equal(svg.style.display,'none');api.dispose();assert.equal(context.__rbChessCoach,undefined);assert.equal(svg.removed,true);
 console.log('PASS: disconnect timeout and cleanup');
 const other=vm.createContext({location:{hostname:'not-chess.com'}});vm.runInContext(coach,other);assert.equal(other.__rbChessCoach,undefined);
 console.log('PASS: no injection on unrelated websites');
+const bridge=fs.readFileSync(path.join(__dirname,'../assets/browser/bridge.js'),'utf8');
+const sockets=[],timeouts=new Map();let timerId=0,paused=true;
+class Socket {
+  static OPEN=1;static CONNECTING=0;
+  constructor(){this.readyState=0;this.handlers={};this.sent=[];sockets.push(this);}
+  addEventListener(k,fn){this.handlers[k]=fn;}
+  send(v){this.sent.push(JSON.parse(v));}
+  close(){this.readyState=3;this.handlers.close?.();}
+  open(){this.readyState=1;this.handlers.open();this.handlers.message({data:JSON.stringify({type:'connected',enabled:true,arrows:true})});}
+}
+const bridgeContext=vm.createContext({RB_ENDPOINT:'ws://127.0.0.1/test',WebSocket:Socket,
+  __rbChessCoach:{snapshot:()=>({paused}),setStatus(){},touch(){},setArrows(){},setEnabled(v){paused=!v;}},
+  setInterval:()=>1,clearInterval(){},setTimeout:(fn,ms)=>{timeouts.set(++timerId,{fn,ms});return timerId;},clearTimeout:id=>timeouts.delete(id)});
+vm.runInContext(bridge,bridgeContext);sockets[0].open();assert.equal(sockets[0].sent.at(-1).paused,true);
+paused=false;bridgeContext.__rbChessBridge.flush();assert.equal(sockets[0].sent.at(-1).paused,false);
+sockets[0].close();[...timeouts.values()].find(t=>t.ms===2000).fn();assert.equal(sockets.length,2);
+sockets[1].open();assert.equal(sockets[1].sent.at(-1).paused,false);
+bridgeContext.__rbChessBridge.close();assert.equal(bridgeContext.__rbChessBridge,undefined);
+console.log('PASS: immediate controls, automatic reconnect, and preserved Start/Stop choice');

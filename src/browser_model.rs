@@ -31,12 +31,21 @@ pub fn detailed_explanation(game: &Game, analysis: &Analysis) -> Option<String> 
     Hint::new(game, analysis).map(|hint| hint.details)
 }
 #[derive(Serialize)]
+struct BoardArrow {
+    uci: String,
+    label: String,
+    color: String,
+    description: String,
+}
+#[derive(Serialize)]
 struct Hint {
     placement: String,
     uci: String,
     san: String,
     evaluation: String,
     details: String,
+    arrows: Vec<BoardArrow>,
+    searching: bool,
     references: Vec<crate::library::Passage>,
 }
 impl Hint {
@@ -44,14 +53,30 @@ impl Hint {
         let line = analysis.lines.first()?;
         let uci = line.pv.first()?;
         let m = game::uci_move(game.pos(), uci).ok()?;
+        let mut arrow_position = game.pos().clone();
+        let mut arrows = Vec::new();
+        use shakmaty::Position;
+        for (i, u) in line.pv.iter().take(3).enumerate() {
+            let Ok(mv) = game::uci_move(&arrow_position, u) else { break };
+            let (color, role) = [("#17e7cf", "Turquoise: suggested move"),
+                ("#ff647c", "Red: expected reply"), ("#65a7ff", "Blue: following move")][i];
+            arrows.push(BoardArrow {
+                uci: u.clone(), label: (i + 1).to_string(), color: color.into(),
+                description: format!("{}. {} — {}. {} {}", i + 1, role,
+                    game::san(&arrow_position, mv), game::move_instruction(&arrow_position, mv),
+                    game::explanation(&arrow_position, mv)),
+            });
+            arrow_position.play_unchecked(mv);
+        }
         let mut details = format!(
             "YOUR MOVE\n{}\n\nWHAT IT DOES\n{}\n\nEVALUATION\n{} (White's perspective: + favors White, − favors Black).",
             game::move_instruction(game.pos(), m),
             game::explanation(game.pos(), m),
             line.label()
         );
+        details = format!("BOARD ARROWS\n{}\nRead the numbered arrows in order. Red and blue show a possible future continuation, not moves to play together.\n\n{}",
+            arrows.iter().map(|a| a.description.as_str()).collect::<Vec<_>>().join("\n\n"), details);
         let mut next = game.pos().clone();
-        use shakmaty::Position;
         next.play_unchecked(m);
         if game.pos().is_check() {
             details += "\n\nYou are in check. This legal move resolves the check.";
@@ -123,6 +148,8 @@ impl Hint {
             san: game::san(game.pos(), m),
             evaluation: line.label(),
             details,
+            arrows,
+            searching: false,
             references: crate::library::search(topic, 2),
         })
     }

@@ -1,9 +1,9 @@
 (() => {
-  if (globalThis.__rbChessCoach?.version === 2) return;
+  if (globalThis.__rbChessCoach?.version === 3) return;
   globalThis.__rbChessCoach?.dispose();
   if (!/(^|\.)chess\.com$/.test(location.hostname)) return;
   const NS = 'http://www.w3.org/2000/svg';
-  let enabled = true, arrows = true, hint = null, currentBoard = null, stopped = false, heartbeat = Date.now(), deep = 0;
+  let enabled = true, arrows = true, hint = null, cachedHint = null, currentBoard = null, stopped = false, heartbeat = Date.now(), connected = false, deep = 0;
   const overlay = document.createElementNS(NS, 'svg');
   overlay.id = 'rbchessassist-arrow';
   overlay.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;display:none;overflow:visible';
@@ -17,6 +17,12 @@
   for (const [key,value] of Object.entries({stroke:'#17e7cf','stroke-width':10,'stroke-linecap':'round','marker-end':'url(#rbchessassist-tip)'})) line.setAttribute(key,value);
   line.style.filter='drop-shadow(0 2px 2px #000b)'; overlay.append(line);
   const ring=document.createElementNS(NS,'circle');ring.setAttribute('r',22);ring.setAttribute('fill','none');ring.setAttribute('stroke','#17e7cf');ring.setAttribute('stroke-width',5);overlay.append(ring);
+  const continuation=document.createElementNS(NS,'g');continuation.id='rbchessassist-detail-arrows';overlay.append(continuation);
+  for(const [id,color] of [['reply','#ff647c'],['followup','#65a7ff']]) {
+    const tip=document.createElementNS(NS,'marker');tip.id='rbchessassist-'+id;
+    for(const [k,v] of Object.entries({markerWidth:5,markerHeight:5,refX:3.8,refY:2.5,orient:'auto',markerUnits:'strokeWidth'}))tip.setAttribute(k,v);
+    const shape=document.createElementNS(NS,'path');shape.setAttribute('d','M0,0 L5,2.5 L0,5 Z');shape.setAttribute('fill',color);tip.append(shape);defs.append(tip);
+  }
   const panel=document.createElement('section'); panel.id='rbchessassist-coach';
   panel.style.cssText='position:fixed;right:16px;bottom:16px;width:300px;max-width:85vw;max-height:75vh;overflow:auto;box-sizing:border-box;padding:16px;background:#111d29;color:#eef6ff;border:1px solid #54cfc2;border-radius:12px;font:14px/1.5 system-ui,sans-serif;z-index:2147483647;box-shadow:0 6px 25px #0007';
   const title=document.createElement('strong');title.textContent='RbChessAssist';title.style.color='#65dfd2';
@@ -25,13 +31,17 @@
   const status=document.createElement('div');status.textContent='Connected. Open a game to see a suggested move.';status.style.marginTop='10px';
   const details=document.createElement('div');details.hidden=true;
   const body=document.createElement('div');body.style.cssText='white-space:pre-line;margin-top:12px';
-  const deeper=document.createElement('button');deeper.type='button';deeper.textContent='Analyze deeper · 15 seconds';deeper.style.cssText='width:100%;margin-top:12px;padding:9px;border:1px solid #65dfd2;border-radius:6px;background:#132c35;color:#b9fff5;cursor:pointer';deeper.addEventListener('click',()=>{deep++;status.textContent='Requesting deeper analysis…';});
+  const deeper=document.createElement('button');deeper.type='button';deeper.textContent='Analyze deeper · 15 seconds';deeper.style.cssText='width:100%;margin-top:12px;padding:9px;border:1px solid #65dfd2;border-radius:6px;background:#132c35;color:#b9fff5;cursor:pointer';deeper.addEventListener('click',()=>{if(deeper.disabled)return;deep++;deeper.disabled=true;status.textContent='Refining this move…';globalThis.__rbChessBridge?.flush();});
   const sources=document.createElement('div');sources.style.cssText='margin-top:14px;font-size:12px';
   details.append(body,deeper,sources);panel.append(title,button,detailButton,status,details);document.documentElement.append(overlay,panel);
-  detailButton.addEventListener('click',()=>{details.hidden=!details.hidden;detailButton.textContent=details.hidden?'Details':'Hide details';detailButton.setAttribute('aria-expanded',String(!details.hidden));});
+  detailButton.addEventListener('click',()=>{details.hidden=!details.hidden;detailButton.textContent=details.hidden?'Details':'Hide details';detailButton.setAttribute('aria-expanded',String(!details.hidden));draw(snapshot());});
   function clear() {hint=null;overlay.style.display='none';body.textContent='';sources.replaceChildren();}
-  function setEnabled(value) {enabled=!!value;clear();button.textContent=enabled?'Stop helping':'Start helping';status.textContent=enabled?'Reading the board…':'Stopped. Click Start helping to resume.';}
-  button.addEventListener('click',()=>setEnabled(!enabled));
+  function setEnabled(value) {
+    if(hint)cachedHint=hint;enabled=!!value;clear();deeper.disabled=!enabled;
+    button.textContent=enabled?'Stop helping':'Start helping';status.textContent=enabled?'Finding your move…':'Stopped. Click Start helping to resume.';
+    if(enabled&&connected&&cachedHint?.placement===snapshot().placement)setHint(cachedHint);
+  }
+  button.addEventListener('click',()=>{setEnabled(!enabled);globalThis.__rbChessBridge?.flush();if(enabled)globalThis.__rbChessBridge?.ensureConnected();});
   function read() {
     if (!enabled) return {paused:true,deep};
     const boards=[...document.querySelectorAll('wc-chess-board,chess-board,.chessboard')];
@@ -53,13 +63,24 @@
     overlay.style.left=r.left+'px';overlay.style.top=r.top+'px';overlay.style.width=r.width+'px';overlay.style.height=r.height+'px';
     const point=s=>{const f=s.charCodeAt(0)-97,k=Number(s[1])-1;return snapshot.flipped?[(7-f)*100+50,k*100+50]:[f*100+50,(7-k)*100+50];};
     const [ax,ay]=point(hint.uci.slice(0,2)),[bx,by]=point(hint.uci.slice(2,4));
-    line.setAttribute('x1',ax);line.setAttribute('y1',ay);line.setAttribute('x2',ax+(bx-ax)*.85);line.setAttribute('y2',ay+(by-ay)*.85);ring.setAttribute('cx',ax);ring.setAttribute('cy',ay);overlay.style.display='block';
+    const mainScale=1-12/Math.max(12,Math.hypot(bx-ax,by-ay));
+    line.setAttribute('x1',ax);line.setAttribute('y1',ay);line.setAttribute('x2',ax+(bx-ax)*mainScale);line.setAttribute('y2',ay+(by-ay)*mainScale);ring.setAttribute('cx',ax);ring.setAttribute('cy',ay);overlay.style.display='block';
+    continuation.replaceChildren();
+    if(!details.hidden)for(const [i,arrow] of (hint.arrows||[]).entries()) {
+      if(!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(arrow.uci))continue;
+      const [x,y]=point(arrow.uci.slice(0,2)),[tx,ty]=point(arrow.uci.slice(2,4));
+      const color=['#17e7cf','#ff647c','#65a7ff'][i];if(!color)continue;
+      if(i>0){const scale=1-9.6/Math.max(9.6,Math.hypot(tx-x,ty-y));const path=document.createElementNS(NS,'line');for(const [k,v]of Object.entries({x1:x,y1:y,x2:x+(tx-x)*scale,y2:y+(ty-y)*scale,stroke:color,'stroke-width':8,'stroke-linecap':'round','stroke-dasharray':'15 9','marker-end':`url(#rbchessassist-${i===1?'reply':'followup'})`}))path.setAttribute(k,v);path.style.filter='drop-shadow(0 2px 2px #000b)';continuation.append(path);}
+      const cx=x+(tx-x)*.48,cy=y+(ty-y)*.48;
+      const badge=document.createElementNS(NS,'circle');for(const[k,v]of Object.entries({cx,cy,r:19,fill:color,stroke:'#102030','stroke-width':3}))badge.setAttribute(k,v);
+      const label=document.createElementNS(NS,'text');for(const[k,v]of Object.entries({x:cx,y:cy+7,'text-anchor':'middle','font-size':23,'font-family':'system-ui','font-weight':800,fill:'#101924'}))label.setAttribute(k,v);label.textContent=String(i+1);continuation.append(badge,label);
+    }
   }
   function snapshot(){try{return read();}catch(e){return {error:String(e.message||e)};}}
-  function setHint(value){hint=value;status.textContent=value?`${value.san}  ·  ${value.evaluation}`:'Analyzing the position…';body.textContent=value?value.details:'';sources.replaceChildren();if(value){
+  function setHint(value){if(!enabled)return;hint=value;if(value)cachedHint=value;deeper.disabled=!!value?.searching;status.textContent=value?`${value.san}  ·  ${value.evaluation}${value.searching?' · refining…':''}`:'Finding your move…';body.textContent=value?value.details:'';sources.replaceChildren();if(value){
     if(value.references?.length){const heading=document.createElement('strong');heading.textContent='Related reading from the local library';sources.append(heading);const note=document.createElement('p');note.textContent='Historical book passages about related concepts. These are not analysis of this exact position; older notation and rules may differ.';sources.append(note);for(const ref of value.references){const block=document.createElement('blockquote');block.style.cssText='margin:12px 0;padding-left:10px;border-left:2px solid #65dfd2';block.textContent=ref.passage;const link=document.createElement('a');link.textContent=ref.title+' — '+ref.author;link.href=ref.url;link.target='_blank';link.rel='noopener noreferrer';link.style.color='#81ddf2';sources.append(block,link);}}
     draw(snapshot());}else overlay.style.display='none';}
-  function setStatus(message){clear();status.textContent=String(message);}
-  const timer=setInterval(()=>{if(stopped)return;if(Date.now()-heartbeat>7000){clear();status.textContent='App disconnected. Open RbChessAssist and click Start helping.';return;}const state=snapshot();if(state.error||state.paused){overlay.style.display='none';if(state.error)status.textContent=state.error;return;}if(hint&&hint.placement!==state.placement){clear();status.textContent='Position changed. Analyzing…';}draw(state);},160);
-  globalThis.__rbChessCoach={version:2,snapshot,setHint,setStatus,setEnabled,setArrows(value){arrows=!!value;if(!arrows)overlay.style.display='none';},touch(){heartbeat=Date.now();},dispose(){stopped=true;clearInterval(timer);globalThis.__rbChessBridge?.close();overlay.remove();panel.remove();delete globalThis.__rbChessCoach;}};
+  function setStatus(message){if(!enabled)return;if(!String(message).startsWith('Analyzing deeper'))clear();status.textContent=String(message);}
+  const timer=setInterval(()=>{if(stopped)return;if(connected&&Date.now()-heartbeat>7000){connected=false;clear();if(enabled)status.textContent='Connection interrupted. Reconnecting…';globalThis.__rbChessBridge?.ensureConnected();return;}const state=snapshot();if(state.error||state.paused){overlay.style.display='none';if(state.error)status.textContent=state.error;return;}if(hint&&hint.placement!==state.placement){clear();deeper.disabled=false;status.textContent='Position changed. Finding your move…';}draw(state);},160);
+  globalThis.__rbChessCoach={version:3,snapshot,setHint,setStatus,setEnabled,setArrows(value){arrows=!!value;if(!arrows)overlay.style.display='none';},touch(){heartbeat=Date.now();connected=true;},dispose(){stopped=true;clearInterval(timer);globalThis.__rbChessBridge?.close();overlay.remove();panel.remove();delete globalThis.__rbChessCoach;}};
 })();

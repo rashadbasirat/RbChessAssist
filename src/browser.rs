@@ -39,7 +39,11 @@ pub struct BrowserCoach {
     stop: Arc<AtomicBool>,
 }
 impl BrowserCoach {
-    pub fn start(seed: Game, mut settings: Settings) -> Self {
+    pub fn start(seed: Game, settings: Settings) -> Self {
+        Self::start_on_port(seed, settings, PORT)
+    }
+    #[doc(hidden)]
+    pub fn start_on_port(seed: Game, mut settings: Settings, port: u16) -> Self {
         let (events, receiver) = mpsc::channel();
         let (commands, controls) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
@@ -48,7 +52,7 @@ impl BrowserCoach {
         settings.threads = settings.threads.min(8);
         settings.hash = settings.hash.min(512);
         std::thread::spawn(move || {
-            if let Err(e) = run(seed, settings, &stopping, &controls, &events) {
+            if let Err(e) = run(seed, settings, &stopping, &controls, &events, port) {
                 let _ = events.send(BrowserEvent::Status(e));
             }
             stopping.store(true, Ordering::Relaxed);
@@ -84,9 +88,10 @@ fn run(
     stop: &AtomicBool,
     controls: &mpsc::Receiver<Control>,
     events: &mpsc::Sender<BrowserEvent>,
+    port: u16,
 ) -> Result<(), String> {
     let token = connection_token()?;
-    let listener = TcpListener::bind(("127.0.0.1", PORT)).map_err(|e| {
+    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| {
         format!("Local connection failed: {e}. Close any other RbChessAssist copy and try again.")
     })?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
@@ -216,15 +221,10 @@ fn run(
                                                 options.seconds = 15.0;
                                                 options.depth = 40;
                                             }
-                                            job = worker.start(
-                                                current.clone(),
-                                                options,
-                                                false,
-                                                false,
-                                            );
+                                            job = worker.start_live(current.clone(), options);
                                             let _ = send(
                                                 s,
-                                                json!({"type":"status","message":if is_deep{"Analyzing deeper (up to 15 seconds)â€¦"}else{"Analyzing the positionâ€¦"}}),
+                                                json!({"type":"status","message":if is_deep{"Analyzing deeper (up to 15 seconds)..."}else{"Finding a move..."}}),
                                             );
                                             let _ = events.send(BrowserEvent::Thinking);
                                         }
@@ -245,6 +245,17 @@ fn run(
             }
             for result in worker.receiver.try_iter() {
                 match result {
+                    Event::Progress(id, analysis) if id == job && enabled && !paused => {
+                        if let Some(mut hint) = Hint::new(&current, &analysis) {
+                            hint.searching = true;
+                            hint.details = format!(
+                                "LIVE ANALYSIS\nThis move is being refined as Stockfish searches.\n\n{}",
+                                hint.details
+                            );
+                            let _ = send(s, json!({"type":"hint","value":hint}));
+                            let _ = events.send(BrowserEvent::Analysis(analysis));
+                        }
+                    }
                     Event::Analysis(id, analysis, _) if id == job => {
                         if let Some(hint) = Hint::new(&current, &analysis) {
                             let _ = send(s, json!({"type":"hint","value":hint}));
@@ -280,7 +291,10 @@ fn run(
     }
     worker.cancel();
     if let Some(mut s) = socket {
-        let _ = send(&mut s, json!({"type":"dispose"}));
+        let _ = send(
+            &mut s,
+            json!({"type":"status","message":"App closed. Reopen RbChessAssist and click Start helping; this tab will reconnect."}),
+        );
         let _ = s.close(None);
     }
     Ok(())
@@ -380,6 +394,30 @@ pub fn bookmarklet() -> Result<String, String> {
         })
         .collect::<String>();
     Ok(format!("javascript:{encoded}"))
+}
+pub fn prepare_extension() -> Result<std::path::PathBuf, String> {
+    let folder = Settings::path().with_file_name("RbChessAssistChrome");
+    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    let manifest = json!({
+        "manifest_version":3, "name":"RbChessAssist", "version":"1.0.0",
+        "description":"Connect your Chess.com board to the local RbChessAssist app.",
+        "content_scripts":[{"matches":["https://www.chess.com/*","https://chess.com/*"],
+            "js":["coach.js"],"run_at":"document_idle","world":"MAIN"}]
+    });
+    let script = format!(
+        "(()=>{{const RB_AUTOMATIC=true;const RB_ENDPOINT='ws://127.0.0.1:{PORT}/coach/{}';{}\n{}\n{}\n}})();",
+        connection_token()?,
+        include_str!("../assets/browser/decoder.js"),
+        include_str!("../assets/browser/coach.js"),
+        include_str!("../assets/browser/bridge.js")
+    );
+    std::fs::write(
+        folder.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::write(folder.join("coach.js"), script).map_err(|e| e.to_string())?;
+    Ok(folder)
 }
 pub fn setup_html() -> Result<String, String> {
     Ok(include_str!("../assets/browser/setup.html").replace(

@@ -231,7 +231,7 @@ impl Studio {
                 self.settings.clone(),
             ));
         }
-        self.status = "Waiting for your Connect RbChessAssist bookmark on Chess.com…".into();
+        self.status = "Waiting for your Chess.com tab. The extension connects automatically; the optional bookmark also works.".into();
     }
     fn stop_helping(&mut self) {
         self.minimize_after_connect = false;
@@ -1352,7 +1352,7 @@ impl Studio {
     fn coach_controls(&mut self, ui: &mut egui::Ui) {
         ui.heading("Your next move");
         ui.label(
-            RichText::new("Chess.com in Chrome · No extension needed")
+            RichText::new("Chess.com in your existing Chrome window")
                 .color(MUTED)
                 .size(12.),
         );
@@ -1446,11 +1446,11 @@ impl Studio {
                     RichText::new(if self.screen_reader.is_some() {
                         &self.status
                     } else {
-                        "Click Start helping, then your Connect bookmark on Chess.com."
+                        "Click Start helping. The Chrome extension connects your board automatically."
                     })
                     .strong(),
                 );
-                ui.label("Use your existing signed-in Chrome tab. Add the Connect RbChessAssist bookmark once, then click it on Chess.com. No extension or new browser profile.");
+                ui.label("Keep your Chess.com tab open. With the RbChessAssist extension installed, Start and Stop work directly from this app. Open Connection for the one-time setup or the optional bookmark method.");
                 if ui.button("Open bookmark setup").clicked() {
                     if self.screen_reader.is_none() {
                         self.enable_screen_reader();
@@ -1596,8 +1596,14 @@ impl Studio {
     fn coach_ui(&mut self, ctx: &egui::Context) {
         let mut open = true;
         egui::Window::new("Chess.com connection").open(&mut open).default_width(440.).show(ctx, |ui| {
-            ui.label("Use your existing signed-in Chrome tab. Start helping starts the local connection. Click your Connect RbChessAssist bookmark on Chess.com to attach the board.");
-            ui.label("No new Chrome profile, extension, or board calibration is needed. Chrome may ask you to allow a connection to the app on your computer.");
+            ui.label("Use your existing signed-in Chrome tab. The optional Chrome extension connects automatically when you click Start helping. The bookmark is also available.");
+            if ui.button("Prepare automatic Chrome connection").clicked() {
+                match chess_assistant_pro::browser::prepare_extension() {
+                    Ok(folder) => {ctx.copy_text(folder.display().to_string());self.status=format!("Extension folder copied: {}. In chrome://extensions enable Developer mode, click Load unpacked and choose this folder. Then reload Chess.com once.",folder.display());},
+                    Err(error) => self.status=error,
+                }
+            }
+            ui.label("One-time extension setup: chrome://extensions → Developer mode → Load unpacked. The button above prepares your private connection files and copies their folder path. Chrome may ask to allow the local app connection.");
             if ui.button("Open bookmark setup").clicked() {
                 if self.screen_reader.is_none() {self.enable_screen_reader();}
                 if let Err(e)=chess_assistant_pro::browser::open_setup(){self.status=e;}
@@ -1615,7 +1621,7 @@ impl Studio {
             }
             if ui.checkbox(&mut self.compact,"Compact app window").changed() { self.resize_coach(ctx); }
             if ui.button("Load current FEN (fallback)").clicked() { self.open_import(false); }
-            ui.label(RichText::new("Live searches take up to 3 seconds. Analyze deeper on the website searches up to 15 seconds. The app minimizes after connecting and keeps helping in the background. Stop pauses suggestions; closing the app disconnects it.").size(12.).color(MUTED));
+            ui.label(RichText::new("Move arrows appear while Stockfish searches and update as it thinks. Details adds numbered turquoise, red and blue arrows. Stop removes them immediately. The app minimizes after connecting and keeps helping in the background.").size(12.).color(MUTED));
         });
         self.coach_open = open;
     }

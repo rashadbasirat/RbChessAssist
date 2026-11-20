@@ -1,8 +1,17 @@
-# Chess.com bookmark connection
+# Chess.com automatic connection
 
-RbChessAssist uses your existing signed-in Chrome tab. It draws arrows inside Chess.com without an extension, another browser profile, or board calibration.
+RbChessAssist uses your existing signed-in Chrome tab. It draws arrows inside Chess.com. The optional extension connects automatically; the bookmark remains available as a manual alternative. Neither method needs a separate browser profile or board calibration.
 
-## One-time setup
+## Automatic connection setup
+
+1. Open **Connection** in RbChessAssist and click **Prepare automatic Chrome connection**. This creates a private extension folder and copies its location.
+2. In Chrome, open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select that folder.
+3. Reload Chess.com once. Allow its local app connection if Chrome asks. If needed, click **Start helping** on the website once to trigger that prompt.
+4. Keep the desktop app running. Its **Start helping** and **Stop helping** controls now work without bookmark clicks. The extension reconnects when the app is reopened.
+
+The extension only runs on Chess.com. Its generated files include your personal pairing token, so do not upload or share that folder. Each downloaded copy of the application prepares its own local files.
+
+## Optional bookmark setup
 
 1. Extract the full Windows ZIP. Keep the `stockfish` folder beside **RbChessAssist.exe**.
 2. Open the app and click **Open bookmark setup**. This starts the local service and opens instructions in an ordinary Chrome tab.
@@ -13,13 +22,13 @@ RbChessAssist uses your existing signed-in Chrome tab. It draws arrows inside Ch
 
 ## Each session
 
-Open the app, click **Start helping**, then click **Connect RbChessAssist** on your Chess.com game. After an engine search the arrow appears on the board. The app minimizes after its first suggestion and continues running in the background. Restore it from the taskbar to use the local library or review tools.
+With the extension installed, open the app and click **Start helping**. The board connects automatically. With the optional bookmark method, also click **Connect RbChessAssist** on your game. An early engine result appears while the search continues. The app minimizes after its first suggestion and continues running in the background. Restore it from the taskbar to use the local library or review tools.
 
-On Chess.com, **Details** sits immediately below **Start/Stop helping**. It expands move instructions, tactical observations, material balance, evaluation, expected reply, continuation, alternatives and attributed book passages. **Analyze deeper** searches for up to 15 seconds. Ordinary searches use up to three seconds, eight threads and 512 MB of hash, capped by your saved settings.
+On Chess.com, **Details** sits immediately below **Start/Stop helping**. It expands move instructions, tactical observations, material balance, evaluation, expected reply, continuation, alternatives and attributed book passages. Details adds numbered turquoise, red and blue arrows: suggested move, expected reply, and following move. Read them sequentially; the later arrows depict a possible future position. **Analyze deeper** searches for up to 15 seconds while updating the visible suggestion. Ordinary searches use up to three seconds, eight threads and 512 MB of hash, capped by your saved settings.
 
 You play the moves yourself. The coach updates when the position changes. Suggestions describe the side to move; positive evaluations favor White and negative favor Black. The expected reply is an engine prediction.
 
-**Stop helping** pauses analysis and hides arrows. **Start helping** resumes without installing the bookmark again. Closing the app ends the connection. After refreshing Chess.com, click the bookmark again. Connecting a second game tab replaces the previous connection.
+**Stop helping** pauses analysis and hides arrows. **Start helping** resumes without installing the bookmark again. Closing the app ends the connection. After refreshing Chess.com, the extension reconnects automatically. Bookmark users click the bookmark again. Connecting a second game tab replaces the previous connection.
 
 ## If it does not connect
 

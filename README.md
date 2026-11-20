@@ -1,6 +1,6 @@
 # RbChessAssist
 
-A native Rust chess studio for Windows. Analyze a position with Stockfish 19, review a completed game, or practice against five engine-strength targets. Stockfish analysis runs locally. The Chess.com companion draws move suggestions directly on the website without a browser extension.
+A native Rust chess studio for Windows. Analyze a position with Stockfish 19, review a completed game, or practice against five engine-strength targets. Stockfish analysis runs locally. The Chess.com companion draws move suggestions directly on the website. An optional Chrome extension provides automatic connection; a bookmark connection is also available.
 
 ![Analysis studio](docs/studio.png)
 
@@ -10,8 +10,9 @@ Download **RbChessAssist-Windows.zip** from [Releases](https://github.com/rashad
 
 ## Features
 
+- **Automatic Chrome connection:** open Connection in the app and click Prepare automatic Chrome connection. In Chrome extensions, enable Developer mode, choose Load unpacked, and select the copied folder. Reload Chess.com once and allow the local app connection if prompted. After setup, Start/Stop works without bookmark clicks. The extension is limited to Chess.com and its private pairing files stay on your computer.
 - **Start helping / Stop helping** for your existing signed-in Chess.com tab in Chrome. Add the **Connect RbChessAssist** bookmark once, then click it on your game. A turquoise move arrow and controls appear directly on the website. No extension or separate Chrome profile. See [connection instructions](docs/COMPANION.md).
-- **Details** immediately below the helping button: move instructions, observable tactical facts, material balance, expected reply, engine continuation, alternatives and related book passages. **Analyze deeper** requests up to 15 seconds of analysis.
+- **Details** immediately below the helping button: move instructions, observable tactical facts, material balance, expected reply, engine continuation, alternatives and related book passages. **Analyze deeper** requests up to 15 seconds of analysis. Suggestions stream while the engine searches. Details shows numbered turquoise, red and blue arrows for the suggested move, expected reply and following move.
 - **Six complete classic books**, about 411,000 words, embedded locally with a searchable reader. Related passages are retrieved by keyword and attributed to their source. Historical book advice is separate from Stockfish's calculation.
 - **Review game** on the main screen: paste or import a PGN, review every move, see per-player counts of Brilliant, Great, Best, Excellent, Good, Inaccuracy, Mistake and Blunder, inspect the evaluation graph, and compare with the engine's preferred line. These are RbChessAssist's documented criteria, not Chess.com's proprietary classifications.
 - Interactive board with legal moves, castling, en passant, all four promotions, coordinates, move animation, check highlights, and three board themes.
@@ -64,7 +65,7 @@ The project uses Rust, egui, Shakmaty, and Rust image processing following the a
 
 Strength targets are approximate. Stockfish's supported Elo range is respected, and maximum strength disables weakening. The 3500 label is an aspirational target, not a measured rating or guarantee. Analysis always runs at full strength. Time and depth limits apply together, and the first reached ends the search.
 
-The app imports the first PGN game's mainline. Nested variations, comments, and annotations are skipped. It does not provide a variation-tree editor. Exported PGN uses an ongoing/unspecified result (`*`), so edit that header when archiving a completed result. Website coaching requires desktop Google Chrome and the Connect bookmark on the chosen Chess.com tab. After reloading that tab, click the bookmark again. Chrome may request local/loopback connection permission. The app respects that permission and does not disable browser security. Future site or browser changes can require updates. If full FEN state is unavailable, start a fresh game or load the current FEN. One connected game tab is supported at a time. The screenshot importer is a separate feature with narrower theme support.
+The app imports the first PGN game's mainline. Nested variations, comments, and annotations are skipped. It does not provide a variation-tree editor. Exported PGN uses an ongoing/unspecified result (`*`), so edit that header when archiving a completed result. Website coaching requires desktop Google Chrome and either the automatic connection extension or the Connect bookmark. With the bookmark method, click the bookmark again after reloading the tab. Chrome may request local/loopback connection permission. The app respects that permission and does not disable browser security. Future site or browser changes can require updates. If full FEN state is unavailable, start a fresh game or load the current FEN. One connected game tab is supported at a time. The screenshot importer is a separate feature with narrower theme support.
 
 The missing-material display can be affected by promotions or a custom starting FEN.
 

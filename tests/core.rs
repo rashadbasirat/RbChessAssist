@@ -18,6 +18,32 @@ fn settings() -> Settings {
     }
 }
 #[test]
+fn live_analysis_streams_before_completion_and_can_cancel() {
+    use std::time::{Duration, Instant};
+    let mut worker = engine::Worker::default();
+    let mut options = settings();
+    options.seconds = 5.0;
+    options.depth = 40;
+    let id = worker.start_live(Game::default(), options);
+    let deadline = Instant::now() + Duration::from_secs(12);
+    let mut preview = false;
+    while Instant::now() < deadline {
+        match worker.receiver.recv_timeout(Duration::from_millis(500)) {
+            Ok(engine::Event::Progress(job, analysis)) if job == id => {
+                assert!(analysis.elapsed < 5.0);
+                assert!(game::uci_move(Game::default().pos(), &analysis.best).is_ok());
+                preview = true;
+                worker.cancel();
+                break;
+            }
+            Ok(engine::Event::Analysis(_, _, _)) => panic!("No preview before completed analysis"),
+            Ok(engine::Event::Error(_, error)) => panic!("{error}"),
+            _ => {}
+        }
+    }
+    assert!(preview, "The live search did not stream a legal move");
+}
+#[test]
 fn legal_and_illegal_moves() {
     let mut g = Game::default();
     assert_eq!(g.pos().legal_moves().len(), 20);
