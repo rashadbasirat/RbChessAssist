@@ -47,3 +47,7 @@ Local training, imports and manual analysis now detach the website coach and dis
 ## November 20 review and strength fixes
 
 All 38 Rust integration tests and nine browser test groups pass. Added regression coverage for full-FEN move-history retention through castling, incompatible-state rejection, PGN round trips, finished-game review completion, full-strength preset configuration and optional page PGN extraction. Removed the three-second website search cap. Review reuses adjacent position evaluations instead of analyzing each twice. Restored games and all Review entry points now use the captured history; a missing history opens PGN import. The maximum-strength preset is a resource configuration, not a measured Elo guarantee.
+
+## Fast suggestions and scroll alignment
+
+The live connection test verifies one legal preliminary hint followed by a final result, without intermediate arrow changes. Browser tests cover next-frame scroll/resize alignment, coalesced event handling, and listener cleanup. Full search time is preserved; the preliminary hint is labeled as refining. Ten browser groups and 38 Rust tests pass.

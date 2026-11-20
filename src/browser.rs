@@ -98,6 +98,7 @@ fn run(
     let mut socket: Option<WebSocket<TcpStream>> = None;
     let mut worker = Worker::default();
     let mut job = 0;
+    let mut preview_job = 0;
     let mut previous = String::new();
     let mut searched = String::new();
     let mut enabled = true;
@@ -223,16 +224,12 @@ fn run(
                                             deep = snapshot.deep;
                                             searched = fen;
                                             let mut options = settings.clone();
+                                            options.multipv = 1;
                                             if is_deep {
                                                 options.seconds = 15.0;
                                                 options.depth = 40;
                                             }
-                                            job = worker.start(
-                                                current.clone(),
-                                                options,
-                                                false,
-                                                false,
-                                            );
+                                            job = worker.start_live(current.clone(), options);
                                             let _ = send(
                                                 s,
                                                 json!({"type":"status","message":if is_deep{"Analyzing deeper (up to 15 seconds)..."}else{"Finding a move..."}}),
@@ -256,11 +253,19 @@ fn run(
             }
             for result in worker.receiver.try_iter() {
                 match result {
-                    Event::Progress(id, analysis) if id == job && enabled && !paused => {
+                    Event::Progress(id, analysis)
+                        if id == job
+                            && id != preview_job
+                            && enabled
+                            && !paused
+                            && analysis.elapsed >= 0.35
+                            && analysis.lines.first().is_some_and(|line| line.depth >= 10) =>
+                    {
                         if let Some(mut hint) = Hint::new(&current, &analysis) {
+                            preview_job = id;
                             hint.searching = true;
                             hint.details = format!(
-                                "LIVE ANALYSIS\nThis move is being refined as Stockfish searches.\n\n{}",
+                                "QUICK SUGGESTION\nStockfish is still calculating. One final update will follow when the deeper search finishes.\n\n{}",
                                 hint.details
                             );
                             let _ = send(s, json!({"type":"hint","value":hint}));

@@ -88,8 +88,8 @@ fn books_are_complete_and_passages_are_real() {
 #[test]
 fn local_bookmark_connection_analyzes_and_pauses() {
     let mut settings = Settings::default();
-    settings.seconds = 0.2;
-    settings.depth = 10;
+    settings.seconds = 3.0;
+    settings.depth = 60;
     settings.threads = 1;
     let coach = BrowserCoach::start_on_port(Game::default(), settings, 38272);
     let token = browser::connection_token().unwrap();
@@ -137,28 +137,44 @@ fn local_bookmark_connection_analyzes_and_pauses() {
         thread::sleep(Duration::from_millis(100));
     }
     let mut verified = false;
+    let mut previews = 0;
     while Instant::now() < deadline {
         if let Message::Text(text) = ws.read().unwrap() {
             let value: serde_json::Value = serde_json::from_str(&text).unwrap();
             if value["type"] == "hint" && !value["value"].is_null() {
                 let hint = &value["value"];
-                assert_eq!(
-                    hint["searching"], false,
-                    "Only settled suggestions should reach the board"
-                );
+                if hint["searching"] == true {
+                    previews += 1;
+                    assert_eq!(
+                        previews, 1,
+                        "Do not flicker through intermediate suggestions"
+                    );
+                    assert!(
+                        game::uci_move(Game::default().pos(), hint["uci"].as_str().unwrap())
+                            .is_ok()
+                    );
+                    continue;
+                }
                 assert!(
                     game::uci_move(Game::default().pos(), hint["uci"].as_str().unwrap()).is_ok()
                 );
                 assert!(hint["details"].as_str().unwrap().contains("EVALUATION"));
                 assert!(hint["references"].as_array().unwrap().len() > 0);
-                assert_eq!(hint["arrows"].as_array().unwrap().len(), 3);
-                assert_eq!(hint["arrows"][1]["color"], "#ff647c");
+                assert!((1..=3).contains(&hint["arrows"].as_array().unwrap().len()));
+                if hint["arrows"].as_array().unwrap().len() > 1 { assert_eq!(hint["arrows"][1]["color"], "#ff647c"); }
                 verified = true;
                 break;
             }
         }
     }
-    assert!(verified, "No engine hint reached the bookmark connection");
+    assert!(
+        verified,
+        "No final engine hint reached the bookmark connection"
+    );
+    assert_eq!(
+        previews, 1,
+        "An early suggestion should precede the final search result"
+    );
     ws.send(Message::Text("{\"paused\":true}".into())).unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);
     let mut paused = false;

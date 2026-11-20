@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__rbChessCoach?.version === 3) return;
+  if (globalThis.__rbChessCoach?.version === 4) return;
   globalThis.__rbChessCoach?.dispose();
   if (!/(^|\.)chess\.com$/.test(location.hostname)) return;
   const NS = 'http://www.w3.org/2000/svg';
@@ -78,11 +78,26 @@
       const label=document.createElementNS(NS,'text');for(const[k,v]of Object.entries({x:cx,y:cy+7,'text-anchor':'middle','font-size':23,'font-family':'system-ui','font-weight':800,fill:'#101924'}))label.setAttribute(k,v);label.textContent=String(i+1);continuation.append(badge,label);
     }
   }
+  // Scrolling changes geometry, not the chess position. Follow it on the next
+  // paint without waiting for polling, decoding pieces, or restarting Stockfish.
+  let geometryFrame = null;
+  function followBoard() {
+    if(stopped || geometryFrame !== null) return;
+    geometryFrame = requestAnimationFrame(()=>{
+      geometryFrame=null;
+      if(!enabled || !arrows || !hint || !currentBoard) return;
+      const r=currentBoard.getBoundingClientRect();
+      overlay.style.left=r.left+'px';overlay.style.top=r.top+'px';
+      overlay.style.width=r.width+'px';overlay.style.height=r.height+'px';
+    });
+  }
+  globalThis.addEventListener('scroll',followBoard,{capture:true,passive:true});
+  globalThis.addEventListener('resize',followBoard,{passive:true});
   function snapshot(){try{return read();}catch(e){return {error:String(e.message||e)};}}
   function setHint(value){if(!enabled)return;hint=value;if(value)cachedHint=value;deeper.disabled=!!value?.searching;status.textContent=value?`${value.san}  ·  ${value.evaluation}${value.searching?' · refining…':''}`:'Finding your move…';body.textContent=value?value.details:'';sources.replaceChildren();if(value){
     if(value.references?.length){const heading=document.createElement('strong');heading.textContent='Related reading from the local library';sources.append(heading);const note=document.createElement('p');note.textContent='Historical book passages about related concepts. These are not analysis of this exact position; older notation and rules may differ.';sources.append(note);for(const ref of value.references){const block=document.createElement('blockquote');block.style.cssText='margin:12px 0;padding-left:10px;border-left:2px solid #65dfd2';block.textContent=ref.passage;const link=document.createElement('a');link.textContent=ref.title+' — '+ref.author;link.href=ref.url;link.target='_blank';link.rel='noopener noreferrer';link.style.color='#81ddf2';sources.append(block,link);}}
     draw(snapshot());}else overlay.style.display='none';}
   function setStatus(message){if(!enabled)return;if(!String(message).startsWith('Analyzing deeper'))clear();status.textContent=String(message);}
   const timer=setInterval(()=>{if(stopped)return;if(connected&&Date.now()-heartbeat>7000){connected=false;clear();if(enabled)status.textContent='Connection interrupted. Reconnecting…';globalThis.__rbChessBridge?.ensureConnected();return;}const state=snapshot();if(state.error||state.paused){overlay.style.display='none';if(state.error)status.textContent=state.error;return;}if(hint&&hint.placement!==state.placement){clear();deeper.disabled=false;status.textContent='Position changed. Finding your move…';}draw(state);},160);
-  globalThis.__rbChessCoach={version:3,snapshot,setHint,setStatus,setEnabled,setArrows(value){arrows=!!value;if(!arrows)overlay.style.display='none';},touch(){heartbeat=Date.now();connected=true;},dispose(){stopped=true;clearInterval(timer);globalThis.__rbChessBridge?.close();overlay.remove();panel.remove();delete globalThis.__rbChessCoach;}};
+  globalThis.__rbChessCoach={version:4,snapshot,setHint,setStatus,setEnabled,setArrows(value){arrows=!!value;if(!arrows)overlay.style.display='none';},touch(){heartbeat=Date.now();connected=true;},dispose(){stopped=true;clearInterval(timer);if(geometryFrame!==null)cancelAnimationFrame(geometryFrame);globalThis.removeEventListener('scroll',followBoard,true);globalThis.removeEventListener('resize',followBoard);globalThis.__rbChessBridge?.close();overlay.remove();panel.remove();delete globalThis.__rbChessCoach;}};
 })();

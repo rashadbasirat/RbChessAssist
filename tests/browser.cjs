@@ -7,10 +7,11 @@ let flipped=false, now=0, tick, nextFen=initial+' w KQkq - 0 1';
 const pieces=[];const rect={left:200,top:100,width:600,height:600};
 function piece(kind,file,rank){return {className:`piece ${kind} square-${file}${rank}`,get classList(){return this.className.split(' ');},getBoundingClientRect(){const sq=this.classList.at(-1),f=+sq[7]-1,r=+sq[8]-1,x=flipped?7-f:f,y=flipped?r:7-r;return {left:200+x*75,right:275+x*75,top:100+y*75,bottom:175+y*75,width:75,height:75};}};}
 for(let f=1;f<=8;f++){pieces.push(piece('w'+'rnbqkbnr'[f-1],f,1),piece('wp',f,2),piece('bp',f,7),piece('b'+'rnbqkbnr'[f-1],f,8));}
+const events=new Map(),frames=new Map();let frameId=0;
 const nodes=[];
 class Node {constructor(tag){this.tag=tag;this.style={};this.attrs={};this.children=[];nodes.push(this);}setAttribute(k,v){this.attrs[k]=String(v);}append(...n){this.children.push(...n);}replaceChildren(...n){this.children=n;}addEventListener(k,fn){this[k]=fn;}remove(){this.removed=true;}}
 const board={getBoundingClientRect:()=>rect,querySelectorAll:()=>pieces,game:{getFEN:()=>nextFen}};
-const context=vm.createContext({location:{hostname:'www.chess.com'},document:{querySelectorAll:()=>[board],createElement:t=>new Node(t),createElementNS:(_,t)=>new Node(t),documentElement:new Node('html')},Date:{now:()=>now},setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
+const context=vm.createContext({addEventListener:(name,fn)=>events.set(name,fn),removeEventListener:name=>events.delete(name),requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId;},cancelAnimationFrame:id=>frames.delete(id),location:{hostname:'www.chess.com'},document:{querySelectorAll:()=>[board],createElement:t=>new Node(t),createElementNS:(_,t)=>new Node(t),documentElement:new Node('html')},Date:{now:()=>now},setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
 vm.runInContext(decoder,context);vm.runInContext(coach,context);
 const api=context.__rbChessCoach;
 const detailToggle=nodes.find(n=>n.textContent==='Details');
@@ -28,6 +29,11 @@ const hint={placement:initial,uci:'e2e4',san:'e4',evaluation:'+0.2',details:'Mov
 hint.arrows=[{uci:'e2e4'},{uci:'e7e5'},{uci:'g1f3'}];
 api.setHint(hint);assert.equal(svg.style.display,'block');assert.equal(svg.style.left,'200px');assert.equal(line.attrs.x1,'450');assert.equal(line.attrs.y1,'650');assert.equal(line.attrs.y2,'462');
 console.log('PASS: arrow attaches to the browser board coordinates');
+rect.left=40;rect.top=-85;events.get('scroll')();events.get('scroll')();assert.equal(frames.size,1);
+for(const fn of frames.values())fn();frames.clear();assert.equal(svg.style.left,'40px');assert.equal(svg.style.top,'-85px');assert.equal(line.attrs.x1,'450');
+rect.width=480;rect.height=480;events.get('resize')();for(const fn of frames.values())fn();frames.clear();assert.equal(svg.style.width,'480px');
+rect.left=200;rect.top=100;rect.width=600;rect.height=600;events.get('scroll')();for(const fn of frames.values())fn();frames.clear();
+console.log('PASS: scrolling and resize align on the next frame, with coalesced events');
 const extra=nodes.find(n=>n.id==='rbchessassist-detail-arrows');
 assert.equal(extra.children.length,0);detailToggle.click();
 assert.deepEqual(extra.children.filter(n=>n.tag==='line').map(n=>n.attrs.stroke),['#ff647c','#65a7ff']);
@@ -42,7 +48,7 @@ api.setEnabled(true);api.setHint(hint);api.setArrows(false);assert.equal(svg.sty
 console.log('PASS: rotated board and website Start/Stop controls');
 pieces.find(p=>p.className==='piece wp square-52').className='piece wp square-54';tick();assert.equal(svg.style.display,'none');assert.equal(api.snapshot().fen,null);
 console.log('PASS: changing position clears stale arrows and rejects stale FEN');
-pieces.find(p=>p.className==='piece wp square-54').className='piece wp square-52';api.setHint(hint);api.touch();now=8000;tick();assert.equal(svg.style.display,'none');api.dispose();assert.equal(context.__rbChessCoach,undefined);assert.equal(svg.removed,true);
+pieces.find(p=>p.className==='piece wp square-54').className='piece wp square-52';api.setHint(hint);api.touch();now=8000;tick();assert.equal(svg.style.display,'none');api.dispose();assert.equal(context.__rbChessCoach,undefined);assert.equal(svg.removed,true);assert.equal(events.size,0);assert.equal(frames.size,0);
 console.log('PASS: disconnect timeout and cleanup');
 const other=vm.createContext({location:{hostname:'not-chess.com'}});vm.runInContext(coach,other);assert.equal(other.__rbChessCoach,undefined);
 console.log('PASS: no injection on unrelated websites');
