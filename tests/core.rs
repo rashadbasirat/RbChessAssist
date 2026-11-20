@@ -435,3 +435,73 @@ fn browser_position_preserves_exact_game_state() {
         .is_err()
     );
 }
+
+#[test]
+fn browser_history_survives_fen_updates_and_roundtrip() {
+    use chess_assistant_pro::browser::position_from_snapshot;
+    let mut tracked = Game::default();
+    let mut played = Game::default();
+    for u in ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6", "e1g1"] {
+        played
+            .push(game::uci_move(played.pos(), u).unwrap())
+            .unwrap();
+        let fen = game::fen(played.pos());
+        tracked =
+            position_from_snapshot(&tracked, fen.split_whitespace().next().unwrap(), Some(&fen))
+                .unwrap();
+        assert_eq!(tracked.moves.len(), played.moves.len());
+        assert_eq!(game::fen(tracked.pos()), fen);
+    }
+    assert_eq!(game::parse_pgn(&tracked.pgn()).unwrap().moves.len(), 7);
+    // A different exact state must never inherit incompatible history.
+    let changed = game::fen(tracked.pos()).replace(" b ", " w ");
+    let imported = position_from_snapshot(
+        &tracked,
+        changed.split_whitespace().next().unwrap(),
+        Some(&changed),
+    )
+    .unwrap();
+    assert!(imported.moves.is_empty());
+}
+
+#[test]
+fn finished_game_review_emits_every_move_and_completion() {
+    use std::time::Duration;
+    let game = game::parse_pgn("1. f3 e5 2. g4 Qh4# 0-1").unwrap();
+    let mut worker = engine::Worker::default();
+    let id = worker.start(game, settings(), false, true);
+    let mut count = 0;
+    loop {
+        match worker
+            .receiver
+            .recv_timeout(Duration::from_secs(20))
+            .unwrap()
+        {
+            engine::Event::Review(job, row) => {
+                assert_eq!(job, id);
+                assert_eq!(row.ply, count);
+                count += 1;
+            }
+            engine::Event::Done(job) => {
+                assert_eq!(job, id);
+                break;
+            }
+            engine::Event::Error(_, e) => panic!("{e}"),
+            _ => {}
+        }
+    }
+    assert_eq!(count, 4);
+}
+
+#[test]
+fn maximum_strength_removes_handicap_and_focuses_search() {
+    let mut s = settings();
+    s.level = 0;
+    s.book_path = "untrusted-book.bin".into();
+    s.maximum_strength();
+    assert_eq!(s.level, 4);
+    assert_eq!(s.multipv, 1);
+    assert_eq!(s.seconds, 10.0);
+    assert_eq!(s.depth, 60);
+    assert!(s.book_path.is_empty());
+}

@@ -43,3 +43,7 @@ Installed the scoped RbChessAssist extension in the existing signed-in Chrome pr
 ## November 20 stability fixes
 
 Local training, imports and manual analysis now detach the website coach and discard queued website events, preventing the website from replacing a local game. Normal coaching publishes only completed search results. Automatic minimizing is disabled. A second board receives HTTP 409 without disposing the first connection. Accepted sockets explicitly use blocking handshakes, then bounded read timeouts. All 35 Rust tests passed, including the two-client regression and settled-result assertion. Manual local play with Chrome open retained 1. e4 e5 2. Nf3 Nc6 and its move history.
+
+## November 20 review and strength fixes
+
+All 38 Rust integration tests and nine browser test groups pass. Added regression coverage for full-FEN move-history retention through castling, incompatible-state rejection, PGN round trips, finished-game review completion, full-strength preset configuration and optional page PGN extraction. Removed the three-second website search cap. Review reuses adjacent position evaluations instead of analyzing each twice. Restored games and all Review entry points now use the captured history; a missing history opens PGN import. The maximum-strength preset is a resource configuration, not a measured Elo guarantee.

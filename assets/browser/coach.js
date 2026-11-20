@@ -55,7 +55,9 @@
     for(const piece of pieces){const square=[...piece.classList].find(c=>/^square-[1-8][1-8]$/.test(c));if(!square)continue;const f=Number(square[7])-1,r=Number(square[8])-1,p=piece.getBoundingClientRect(),x=((p.left+p.right)/2-rect.left)/rect.width*8,y=((p.top+p.bottom)/2-rect.top)/rect.height*8;normal+=(x-f-.5)**2+(y-(7-r)-.5)**2;reverse+=(x-(7-f)-.5)**2+(y-r-.5)**2;}
     const flipped=reverse<normal;
     currentBoard=board;
-    return {placement,fen,flipped,deep};
+    let pgn=null;
+    try { const g=board.game; const value=typeof g?.getPGN==='function'?g.getPGN():typeof g?.getPgn==='function'?g.getPgn():null; if(typeof value==='string'&&value.length<1000000)pgn=value; } catch (_) {}
+    return {placement,fen,pgn,flipped,deep};
   }
   function draw(snapshot) {
     if(!hint||!enabled||!arrows||snapshot.placement!==hint.placement||!currentBoard){overlay.style.display='none';return;}

@@ -48,7 +48,7 @@ impl BrowserCoach {
         let (commands, controls) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
-        settings.seconds = settings.seconds.min(3.0);
+        settings.seconds = settings.seconds.clamp(0.2, 30.0);
         settings.threads = settings.threads.min(8);
         settings.hash = settings.hash.min(512);
         std::thread::spawn(move || {
@@ -202,6 +202,16 @@ fn run(
                                     }
                                     Ok(game) => {
                                         current = game;
+                                        if let Some(pgn) = snapshot.pgn.as_deref() {
+                                            if let Ok(mut full) = game::parse_pgn(pgn) {
+                                                full.cursor = full.moves.len();
+                                                if game::fen(full.pos()) == game::fen(current.pos())
+                                                    && full.moves.len() > current.moves.len()
+                                                {
+                                                    current = full;
+                                                }
+                                            }
+                                        }
                                         last_status.clear();
                                         let _ = events.send(BrowserEvent::Board {
                                             game: current.clone(),

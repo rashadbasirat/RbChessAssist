@@ -29,8 +29,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             level: 4,
-            seconds: 2.0,
-            depth: 24,
+            seconds: 5.0,
+            depth: 40,
             threads: std::thread::available_parallelism().map_or(2, |n| n.get().min(4)),
             hash: 256,
             multipv: 3,
@@ -52,6 +52,16 @@ impl Default for Settings {
     }
 }
 impl Settings {
+    pub fn maximum_strength(&mut self) {
+        self.level = 4;
+        self.seconds = 10.0;
+        self.depth = 60;
+        self.threads = std::thread::available_parallelism()
+            .map_or(2, |n| n.get().saturating_sub(2).clamp(1, 8));
+        self.hash = 512;
+        self.multipv = 1;
+        self.book_path.clear();
+    }
     pub fn path() -> PathBuf {
         directories::ProjectDirs::from("org", "RashadBasirat", "ChessAssistantPro")
             .map(|d| d.config_dir().join("settings.json"))

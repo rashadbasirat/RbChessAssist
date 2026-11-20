@@ -182,11 +182,22 @@ impl Studio {
             app.search(false, false);
         }
         if app.capture.is_none() {
+            if let Ok(text) =
+                std::fs::read_to_string(Settings::path().with_file_name("last-game.pgn"))
+            {
+                if let Ok(mut game) = game::parse_pgn(&text) {
+                    game.cursor = game.moves.len();
+                    app.game = game;
+                }
+            }
             app.compact = app.settings.coach_compact;
             app.resize_coach(&cc.egui_ctx);
             if app.settings.companion_auto_start {
                 let path = Settings::path().with_file_name("companion-game.pgn");
-                if let Ok(text) = std::fs::read_to_string(path) {
+                if let Some(text) = std::fs::read_to_string(path)
+                    .ok()
+                    .filter(|_| app.game.moves.is_empty())
+                {
                     if let Ok(mut game) = game::parse_pgn(&text) {
                         game.cursor = game.moves.len();
                         app.game = game;
@@ -293,6 +304,7 @@ impl Studio {
         self.disconnect_browser_for_local_game();
         self.reset_analysis();
         self.game = g;
+        self.save_current_game();
         self.history.clear();
         self.playing = false;
         self.home = false;
@@ -323,13 +335,28 @@ impl Studio {
             self.search(true, false);
         }
     }
+    fn save_current_game(&self) {
+        if self.capture.is_some() || self.game.moves.is_empty() {
+            return;
+        }
+        let path = Settings::path().with_file_name("last-game.pgn");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let temporary = path.with_extension("tmp");
+        if std::fs::write(&temporary, self.game.pgn()).is_ok() {
+            let _ = std::fs::rename(temporary, path);
+        }
+    }
     fn search(&mut self, play: bool, review: bool) {
         self.disconnect_browser_for_local_game();
         self.home = false;
         self.variation.clear();
         self.variation_step = 0;
         if review && self.game.moves.is_empty() {
-            self.status = "Import or play a game before starting review.".into();
+            self.open_import(true);
+            self.review_after_import = true;
+            self.status = "Only a board position was captured. Import the completed game's PGN to review every move.".into();
             return;
         }
         if !review && self.game.terminal().is_some() {
@@ -365,6 +392,7 @@ impl Studio {
         self.reset_analysis();
         match self.game.push(m) {
             Ok(()) => {
+                self.save_current_game();
                 self.history.clear();
                 if let (Some(from), Some(to), Some(c)) = (from, to, symbol) {
                     self.animation = Some((Instant::now(), from, to, c));
@@ -417,9 +445,12 @@ impl Studio {
                     self.browser_paused = false;
                     self.last_board = Some(Instant::now());
                     self.settings.flipped = flipped;
-                    if game::fen(game.pos()) != game::fen(self.game.pos()) {
+                    if game::fen(game.pos()) != game::fen(self.game.pos())
+                        || game.moves.len() != self.game.moves.len()
+                    {
                         self.reset_analysis();
                         self.game = game;
+                        self.save_current_game();
                     }
                 }
                 BrowserEvent::Thinking => {
@@ -661,7 +692,7 @@ impl Studio {
                     self.new_game(true);
                 }
                 if ui.button("Review completed game").clicked() {
-                    self.open_import(true);
+                    self.search(false, true);
                 }
             });
             card(&mut cols[2], |ui| {
@@ -1408,12 +1439,11 @@ impl Studio {
                 self.resize_coach(ui.ctx());
             }
         });
-        if ui.button("Review game · import PGN").clicked() {
+        if ui.button("Review current game").clicked() {
             self.stop_helping();
             self.compact = false;
             self.resize_coach(ui.ctx());
-            self.open_import(true);
-            self.review_after_import = true;
+            self.search(false, true);
         }
         ui.horizontal(|ui| {
             if ui
@@ -1660,7 +1690,10 @@ impl Studio {
         let mut open = true;
         egui::Window::new("Studio settings").open(&mut open).default_width(530.).show(ctx,|ui|{
         egui::ScrollArea::vertical().max_height(650.).show(ui,|ui|{
-            ui.heading("Engine resources");ui.add(egui::Slider::new(&mut self.settings.seconds,0.2..=30.).text("Seconds per position"));ui.add(egui::Slider::new(&mut self.settings.depth,1..=60).text("Depth ceiling"));ui.add(egui::Slider::new(&mut self.settings.threads,1..=32).text("CPU threads"));ui.add(egui::Slider::new(&mut self.settings.hash,16..=4096).text("Hash memory (MB)"));ui.add(egui::Slider::new(&mut self.settings.multipv,1..=3).text("Candidate moves"));
+            ui.heading("Engine resources");
+            if ui.button("Maximum strength · 10 seconds").clicked() { self.settings.maximum_strength(); }
+            ui.label("Maximum strength uses full Stockfish skill and focuses on one best move. Longer searches take more time; no engine is unbeatable.");
+            ui.add(egui::Slider::new(&mut self.settings.seconds,0.2..=30.).text("Seconds per position"));ui.add(egui::Slider::new(&mut self.settings.depth,1..=60).text("Depth ceiling"));ui.add(egui::Slider::new(&mut self.settings.threads,1..=32).text("CPU threads"));ui.add(egui::Slider::new(&mut self.settings.hash,16..=4096).text("Hash memory (MB)"));ui.add(egui::Slider::new(&mut self.settings.multipv,1..=3).text("Candidate moves"));
             ui.label("Search stops at the time limit or depth ceiling. Analysis always uses full strength.");
             if ui.button("Choose Stockfish executable").clicked(){if let Some(p)=rfd::FileDialog::new().add_filter("Engine",&["exe"]).pick_file(){self.settings.engine_path=p.display().to_string();}}
             ui.label(RichText::new(self.settings.engine().display().to_string()).size(10.).color(MUTED));

@@ -7,6 +7,7 @@ struct Snapshot {
     error: Option<String>,
     placement: Option<String>,
     fen: Option<String>,
+    pgn: Option<String>,
     #[serde(default)]
     flipped: bool,
 }
@@ -22,6 +23,12 @@ pub fn position_from_snapshot(
         let position = game::parse_fen(fen)?;
         if game::fen(previous.pos()) == game::fen(&position) {
             return Ok(previous.clone());
+        }
+        // Exact FEN is authoritative, but don't discard legal move history.
+        if let Ok(next) = companion::synchronize(previous, placement) {
+            if game::fen(next.pos()) == game::fen(&position) {
+                return Ok(next);
+            }
         }
         return Ok(Game::new(position));
     }

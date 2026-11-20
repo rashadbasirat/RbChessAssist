@@ -509,13 +509,14 @@ impl Worker {
                 if review {
                     let mut s = settings.clone();
                     s.multipv = 3;
+                    let mut before = search(&game.positions[0], &s, false, &gen_id, id)?;
                     for ply in 0..game.moves.len() {
-                        let before = search(&game.positions[ply], &s, false, &gen_id, id)?;
                         let after = search(&game.positions[ply + 1], &s, false, &gen_id, id)?;
                         if gen_id.load(Ordering::Relaxed) != id {
                             return Ok(());
                         }
                         let _ = tx.send(Event::Review(id, review_row(&game, ply, &before, &after)));
+                        before = after;
                     }
                     let _ = tx.send(Event::Done(id));
                 } else {
